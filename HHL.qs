@@ -19,20 +19,21 @@ namespace HHL {
     @EntryPoint()
     operation EntryPointMain() : Unit {
         let applyControlledUnitary = ApplyControlledUnitary;
-        let precisionQubits = 3;
-        let coefficients = [1.0, 0.0, 0.0, 0.0];
+        let precisionQubits = 10; // Adjust based on the precision required for larger matrices
+        let coefficients = [1.0, 0.0, 0.0, 0.0]; // Adjust the coefficients based on the problem
+        let matrixSize = 1000; // Adjust the matrix size as needed
         
-        Main(applyControlledUnitary, precisionQubits, coefficients);
+        Main(applyControlledUnitary, precisionQubits, coefficients, matrixSize);
     }
 
-    operation Main(ApplyControlledUnitary: (Qubit, Qubit[], Double) => Unit, precisionQubits: Int, coefficients: Double[]) : Unit {
-        use targetRegister = Qubit[4];
+    operation Main(ApplyControlledUnitary: (Qubit, Qubit[], Double) => Unit, precisionQubits: Int, coefficients: Double[], matrixSize: Int) : Unit {
+        use targetRegister = Qubit[matrixSize];
         
         // Prepare |b⟩ state
-        PrepareBState(targetRegister, coefficients);
+        PrepareBState(targetRegister, coefficients, matrixSize);
         
         // Apply Quantum Phase Estimation with controlled rotation for eigenvalue inversion
-        QuantumPhaseEstimationWithInversion(ApplyControlledUnitary, precisionQubits, targetRegister);
+        QuantumPhaseEstimationWithInversion(ApplyControlledUnitary, precisionQubits, targetRegister, matrixSize);
         
         // Display the state (for demonstration, requires measurement)
         DumpRegister(targetRegister);
@@ -48,110 +49,32 @@ namespace HHL {
     }
 
     function CalculateNorm(coefficients: Double[]): Double {
-        mutable norm = 0.0;
-        for i in 0 .. Length(coefficients) - 1 {
-            set norm += coefficients[i] * coefficients[i];
+        mutable sum = 0.0;
+        for coefficient in coefficients {
+            set sum += AbsD(coefficient);
         }
-        return Sqrt(norm);
+        return Sqrt(sum);
     }
 
-    function NormalizeCoefficients(coefficients: Double[], norm: Double): Double[] {
-        mutable normalizedCoefficients = coefficients;
-        for i in 0 .. Length(coefficients) - 1 {
-            set normalizedCoefficients w/= i <- coefficients[i] / norm;
-        }
-        return normalizedCoefficients;
-    }
-
-    operation PrepareBState(register: Qubit[], coefficients: Double[]): Unit is Adj + Ctl {
-        let n = Length(register);
-        if (n != Length(coefficients)) {
-            fail "The length of coefficients array must match the number of qubits.";
-        }
-
-        // Normalize the coefficients using a function
+    operation PrepareBState(targetRegister: Qubit[], coefficients: Double[], matrixSize: Int) : Unit {
+        // Initialize the state |b⟩ with given coefficients and size
         let norm = CalculateNorm(coefficients);
-        let normalizedCoefficients = NormalizeCoefficients(coefficients, norm);
-
-        // Prepare |b⟩ state using the normalized coefficients
-        for i in 0 .. (n - 1) {
-            Ry(2.0 * ArcCos(normalizedCoefficients[i]), register[i]);
+        for i in 0 .. Length(coefficients) - 1 {
+            let amplitude = coefficients[i] / norm;
+            Ry(2.0 * ArcSin(amplitude), targetRegister[i]);
         }
     }
 
-    function PowI (a : Int, power : Int) : Int {
-        mutable result = 1;
-        for _ in 1..power {
-            set result *= a;
+    operation ApplyControlledUnitary(control: Qubit, targetRegister: Qubit[], time: Double) : Unit {
+        // Apply controlled identity matrix evolution
+        // For an identity matrix, the unitary operation is just a phase shift
+        // U = exp(-i * I * time) = exp(-i * time) * I
+        // This is equivalent to applying a global phase, which can be ignored for practical purposes
+        // Therefore, we apply a phase shift to each qubit in the target register
+
+        for i in 0 .. Length(targetRegister) - 1 {
+            Controlled Rz([control], (time, targetRegister[i]));
         }
-        return result;
-    }
-
-    function RoundAsInt(value : Double) : Int {
-        return (Floor(value + 0.5));
-    }
-
-    operation HamiltonianSimulation(hamiltonian: Double[][], time: Double, qubits: Qubit[]): Unit is Adj + Ctl {
-        let nQubits = Length(qubits);
-        let nMatrixRows = Length(hamiltonian);
-        let nMatrixCols = Length(hamiltonian[0]);
-    
-        // Basic validation
-        if nMatrixRows != nMatrixCols {
-            fail "Hamiltonian matrix must be square.";
-        }
-        if nMatrixRows != PowI(2, nQubits) {
-            fail "Hamiltonian matrix dimensions do not match the number of qubits.";
-        }
-
-        // Time evolution parameters
-        let stepSize = 0.1; // Time step for the Trotter-Suzuki decomposition
-        let nSteps = RoundAsInt(time / stepSize);
-        
-        for _ in 1..nSteps {
-            // Apply Hamiltonian simulation for each step
-            for i in 0..nMatrixRows - 1 {
-                for j in 0..nMatrixCols - 1 {
-                    let h_ij = hamiltonian[i][j];
-                    if (h_ij != 0.0) {
-                        // Apply controlled Rz rotations based on the Hamiltonian matrix elements
-                        // Adjust angles based on the time step size
-                        let angle = -2.0 * h_ij * stepSize;
-                        if (i == j) {
-                            for k in 0..nQubits - 1 {
-                                Rz(angle, qubits[k]);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    operation ApplyControlledUnitary(control: Qubit, register: Qubit[], time: Double): Unit is Adj + Ctl {
-        // Example Hamiltonian matrix A (identity matrix for simplicity)
-        let hamiltonian = [
-            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
-        ];
-
-        // Apply controlled Hamiltonian simulation
-        let controlledHamiltonianSimulation = Controlled HamiltonianSimulation;
-        controlledHamiltonianSimulation([control], (hamiltonian, time, register));
     }
 
     function PowD(x: Double, y: Double): Double {
@@ -161,7 +84,8 @@ namespace HHL {
     operation QuantumPhaseEstimationWithInversion(
         ApplyControlledUnitary: (Qubit, Qubit[], Double) => Unit,
         precisionQubits: Int,
-        targetRegister: Qubit[]
+        targetRegister: Qubit[],
+        matrixSize: Int
     ) : Unit {
         use precisionRegister = Qubit[precisionQubits];
         use ancilla = Qubit();
