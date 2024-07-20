@@ -36,23 +36,23 @@ namespace AlgorithmHHL {
         T : Int,
         epsilon : Double
     ) : Unit {
-        // Define the condition number κ
+        // Define the condition number kappa
         // For a 16x16 identity matrix, the condition number is 1
         let kappa = 1;
 
-        function h(λ : Double) : Double {
-            return 1.0 / λ;
+        function h(lambda : Double) : Double {
+            return 1.0 / lambda;
         }
 
-        function f(λ : Double) : Double {
-            // For identity matrix, λ is always 1
-            // We define f(λ) = 1/sqrt(2)
+        function f(lambda : Double) : Double {
+            // For identity matrix, lambda is always 1
+            // We define f(lambda) = 1/sqrt(2)
             return 1.0 / Sqrt(2.0);
         }
 
-        function g(λ : Double) : Double {
-            // For the identity matrix, λ is always 1
-            // We define g(λ) = 1/sqrt(2)
+        function g(lambda : Double) : Double {
+            // For the identity matrix, lambda is always 1
+            // We define g(lambda) = 1/sqrt(2)
             return 1.0 / Sqrt(2.0);
         }
 
@@ -61,12 +61,12 @@ namespace AlgorithmHHL {
         use ancilla = Qubit[3];
         mutable iteration = 0;
         repeat {
-            // Step 1: Prepare the input state Ψ0
+            // Step 1: Prepare the input state Psi0
             PrepareInitialState(b, T);
 
             // Step 2: Apply the conditional Hamiltonian evolution
-            for τ in 0..T-1 {
-                let applyH = ApplyHamiltonianEvolution(A, t0, τ, T);
+            for tau in 0..T-1 {
+                let applyH = ApplyHamiltonianEvolution(A, t0, tau, T);
                 applyH(b);
             }
 
@@ -83,15 +83,15 @@ namespace AlgorithmHHL {
 
     operation PrepareInitialState(qubits : Qubit[], T : Int) : Unit {
         let normalizationFactor = Sqrt(2.0 / IntAsDouble(T));
-        for τ in 0..T-1 {
-            let amplitude = normalizationFactor * Sin(PI() * (IntAsDouble(τ) + 0.5) / IntAsDouble(T));
-            Ry(2.0 * ArcSin(amplitude), qubits[τ]);
+        for tau in 0..T-1 {
+            let amplitude = normalizationFactor * Sin(PI() * (IntAsDouble(tau) + 0.5) / IntAsDouble(T));
+            Ry(2.0 * ArcSin(amplitude), qubits[tau]);
         }
     }
 
-    operation ApplyHamiltonianEvolution(A : ((Int, Int) -> Double), t0 : Double, τ : Int, T : Int) : ((Qubit[]) => Unit is Adj + Ctl) {
+    operation ApplyHamiltonianEvolution(A : ((Int, Int) -> Double), t0 : Double, tau : Int, T : Int) : ((Qubit[]) => Unit is Adj + Ctl) {
         return (qubits => {
-            let evolutionTime = IntAsDouble(τ) * t0 / IntAsDouble(T);
+            let evolutionTime = IntAsDouble(tau) * t0 / IntAsDouble(T);
             ApplyEvolution(A, evolutionTime, qubits);
         });
     }
